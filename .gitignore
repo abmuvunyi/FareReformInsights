@@ -1,0 +1,16 @@
+# Ignore PyCharm config
+.idea/
+
+# Ignore Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore Python cache
+__pycache__/
+
+# Ignore virtual environments (optional)
+env/
+venv/
+
+# Ignore OS metadata
+.DS_Store
+
