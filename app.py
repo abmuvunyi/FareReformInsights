@@ -1,22 +1,21 @@
-# app.py — FareReformInsights Streamlit Dashboard
-
 import streamlit as st
 import pandas as pd
 from textblob import TextBlob
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS
 import re
+from collections import Counter
 
 st.set_page_config(page_title="FareReformInsights", layout="wide")
 
 # --- Load data ---
 st.title("FareReformInsights – Public Sentiment Dashboard")
-df = pd.read_csv("data/expanded_tweets.csv")
+df = pd.read_csv("data/combined_sentiment_dataset.csv")
 df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
 
-# --- Analyze Sentiment ---
+# --- Analyze Sentiment & Subjectivity ---
 def classify_sentiment(text):
-    polarity = TextBlob(text).sentiment.polarity
+    polarity = TextBlob(str(text)).sentiment.polarity
     if polarity >= 0.05:
         return "Positive"
     elif polarity <= -0.05:
@@ -24,8 +23,8 @@ def classify_sentiment(text):
     else:
         return "Neutral"
 
-df["sentiment"] = df["text"].apply(classify_sentiment)
-df["subjectivity"] = df["text"].apply(lambda x: TextBlob(x).sentiment.subjectivity)
+df["sentiment"] = df["translated_text"].apply(classify_sentiment)
+df["subjectivity"] = df["translated_text"].apply(lambda x: TextBlob(str(x)).sentiment.subjectivity)
 df["flagged"] = df["subjectivity"] > 0.85
 
 # --- Sidebar filters ---
@@ -37,9 +36,8 @@ filtered_df = df[(df["date"] >= pd.to_datetime(date_range[0])) & (df["date"] <= 
 st.subheader("Sentiment Distribution")
 sentiment_counts = filtered_df["sentiment"].value_counts()
 st.bar_chart(sentiment_counts)
-# Optional Pie Chart View
-st.subheader("Sentiment Distribution (Pie Chart)")
 
+st.subheader("Sentiment Distribution (Pie Chart)")
 fig, ax = plt.subplots()
 ax.pie(
     sentiment_counts.values,
@@ -48,7 +46,7 @@ ax.pie(
     startangle=90,
     colors=['lightgreen', 'lightcoral', 'lightgrey'][:len(sentiment_counts)]
 )
-ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+ax.axis('equal')
 st.pyplot(fig)
 
 # --- Sentiment Over Time ---
@@ -61,24 +59,9 @@ sentiment_over_time = (
 sentiment_over_time.index = sentiment_over_time.index.to_timestamp()
 st.line_chart(sentiment_over_time)
 
-# --- Clean Text for Word Cloud ---
-def clean_text(text):
-    text = re.sub(r"http\S+", "", text)             # remove URLs
-    text = re.sub(r"@\w+", "", text)                # remove mentions
-    text = re.sub(r"[^a-zA-Z\s]", "", text)         # remove numbers and punctuation
-    return text.lower()
-
-custom_stopwords = set(STOPWORDS)
-custom_stopwords.update(["rwanda", "transport", "fare", "rt", "public", "https", "co"])
-
 # --- Word Cloud ---
-# --- Word Cloud with Cleaned Text and Custom Stopwords ---
-import re
-from wordcloud import STOPWORDS
-
 st.subheader("Most Common Meaningful Words in Comments")
 
-# Define custom stopwords
 custom_stopwords = set(STOPWORDS)
 custom_stopwords.update([
     "rt", "https", "t", "co", "rwanda", "transport", "public", "fare",
@@ -86,17 +69,13 @@ custom_stopwords.update([
     "preeminent", "diplomatic", "eminent", "combined"
 ])
 
-# Clean text: remove links, mentions, non-alphabetic characters
 def clean_text(text):
-    text = re.sub(r"http\S+", "", text)            # remove URLs
-    text = re.sub(r"@\w+", "", text)               # remove @mentions
-    text = re.sub(r"[^a-zA-Z\s]", "", text)        # remove punctuation/numbers
+    text = re.sub(r"http\S+", "", text)
+    text = re.sub(r"@\w+", "", text)
+    text = re.sub(r"[^a-zA-Z\s]", "", text)
     return text.lower()
 
-# Apply cleaning and join
-word_text = ' '.join(filtered_df["text"].dropna().apply(clean_text).tolist())
-
-# Generate and display word cloud
+word_text = ' '.join(filtered_df["translated_text"].dropna().apply(clean_text).tolist())
 wordcloud = WordCloud(
     stopwords=custom_stopwords,
     background_color='white',
@@ -105,22 +84,64 @@ wordcloud = WordCloud(
 
 st.image(wordcloud.to_array(), use_column_width=True)
 
-
 # --- Sample Comments ---
 st.subheader("Sample Comments")
 col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**Top Positive Comments**")
-    for comment in filtered_df[filtered_df["sentiment"] == "Positive"]["text"].head(3):
+    for comment in filtered_df[filtered_df["sentiment"] == "Positive"]["translated_text"].head(3):
         st.success(comment)
 
 with col2:
     st.markdown("**Top Negative Comments**")
-    for comment in filtered_df[filtered_df["sentiment"] == "Negative"]["text"].head(3):
+    for comment in filtered_df[filtered_df["sentiment"] == "Negative"]["translated_text"].head(3):
         st.error(comment)
 
 # --- Flagged Comments ---
-st.subheader("Flagged Comments (Highly Subjective)")
+st.subheader("⚠️ Flagged Comments (Highly Subjective)")
 for _, row in filtered_df[filtered_df["flagged"]].iterrows():
-    st.warning(f"{row['date'].date()}: {row['text']}")
+    st.warning(f"{row['date'].date()}: {row['translated_text']}")
+
+# --- Insights Summary ---
+st.subheader("📌 Key Insights")
+
+total = len(filtered_df)
+pos = (filtered_df["sentiment"] == "Positive").sum()
+neg = (filtered_df["sentiment"] == "Negative").sum()
+neu = (filtered_df["sentiment"] == "Neutral").sum()
+flagged = filtered_df["flagged"].sum()
+
+st.markdown(f"""
+- Out of **{total}** comments, **{pos}** were positive (**{(pos/total)*100:.1f}%**), **{neg}** negative (**{(neg/total)*100:.1f}%**), and **{neu}** neutral.
+- **{flagged}** comments were flagged as **highly subjective**, which may indicate confusion, frustration, or misinformation.
+""")
+
+# --- Common Topic Highlights ---
+st.subheader("🔎 Common Keywords")
+keywords = ["fare", "increase", "card", "price", "cheap", "expensive", "distance", "smart", "explain", "confusing"]
+tokens = ' '.join(filtered_df["translated_text"].dropna()).lower().split()
+found = [w for w in tokens if w in keywords]
+top_keywords = Counter(found).most_common(5)
+
+if top_keywords:
+    st.markdown("**Frequent keywords in concerns:** " + ", ".join([k[0] for k in top_keywords]))
+else:
+    st.markdown("_No dominant keywords found._")
+
+# --- Recommendations ---
+st.subheader("🧠 Recommendations")
+st.markdown("""
+- ✅ **Improve communication** around fare structure and calculations.
+- 📢 **Use SMS, community radio, and bus posters** to educate the public.
+- 💳 **Standardize smart card fare updates** to avoid confusion and price mismatch.
+- 🧾 **Review flagged comments weekly** to spot emotional concerns or misinformation early.
+""")
+
+# --- Export Flagged Comments ---
+st.download_button(
+    "📥 Download Flagged Comments as CSV",
+    data=filtered_df[filtered_df["flagged"]][["date", "translated_text"]].to_csv(index=False),
+    file_name="flagged_comments.csv",
+    mime="text/csv"
+)
