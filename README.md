@@ -15,7 +15,8 @@
 - Export and work with extended datasets
 
 ---
-
+## Demo
+https://farereforminsights.streamlit.app/
 ## Project Structure
 
 ```
