@@ -3,6 +3,8 @@
 **FareReformInsights** is a Python-based sentiment analysis dashboard that helps policymakers understand how citizens perceive Rwanda's transition to a distance-based public transport fare system.
 
 ---
+## Demo
+https://farereforminsights.streamlit.app/
 
 ## Features
 
@@ -15,8 +17,7 @@
 - Export and work with extended datasets
 
 ---
-## Demo
-https://farereforminsights.streamlit.app/
+
 ## Project Structure
 
 ```
