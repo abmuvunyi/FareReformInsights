@@ -4,29 +4,27 @@ from textblob import TextBlob
 import seaborn as sns
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud, STOPWORDS
-import re
 from collections import Counter
+from utils import analyze_sentiment, clean_text
 
 st.set_page_config(page_title="FareReformInsights", layout="wide")
 
 # --- Load data ---
 st.title("FareReformInsights – Public Sentiment Dashboard")
-df = pd.read_csv("data/combined_sentiment_dataset.csv")
-df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
 
-# --- Analyze Sentiment & Subjectivity ---
-def classify_sentiment(text):
-    polarity = TextBlob(str(text)).sentiment.polarity
-    if polarity >= 0.03:
-        return "Positive"
-    elif polarity <= -0.05:
-        return "Negative"
-    else:
-        return "Neutral"
+@st.cache_data
+def load_and_process_data():
+    df = pd.read_csv("data/combined_sentiment_dataset.csv")
+    df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
 
-df["sentiment"] = df["translated_text"].apply(classify_sentiment)
-df["subjectivity"] = df["translated_text"].apply(lambda x: TextBlob(str(x)).sentiment.subjectivity)
-df["flagged"] = df["subjectivity"] > 0.85
+    # --- Analyze Sentiment & Subjectivity ---
+    sentiment_results = df["translated_text"].apply(analyze_sentiment)
+    df["sentiment"] = sentiment_results.apply(lambda x: x[0])
+    df["subjectivity"] = sentiment_results.apply(lambda x: x[1])
+    df["flagged"] = sentiment_results.apply(lambda x: x[2])
+    return df
+
+df = load_and_process_data()
 
 # --- Sidebar filters ---
 # Sidebar Filters
@@ -48,7 +46,7 @@ if selected_sentiment != "All":
 # Keyword search filter
 keyword = st.sidebar.text_input("Search keyword in comments")
 if keyword:
-    filtered_df = filtered_df[filtered_df["translated_text"].str.contains(keyword, case=False, na=False)]
+    filtered_df = filtered_df[filtered_df["translated_text"].str.contains(keyword, case=False, na=False, regex=False)]
 
 # Flagged-only checkbox
 show_flagged = st.sidebar.checkbox("Show only highly subjective comments")
@@ -121,12 +119,6 @@ custom_stopwords.update([
     "kigali", "kololo", "whole", "potholes", "consider", "new",
     "half", "preeminent", "diplomatic", "fair"
 ])
-def clean_text(text):
-    if not isinstance(text, str):
-        return ""
-    text = re.sub(r"http\S+|@\w+", "", text)
-    text = re.sub(r"[^a-zA-Z\s]", "", text)
-    return text.lower().strip()
 
 text_corpus = ' '.join(filtered_df["translated_text"].dropna().apply(clean_text).tolist())
 wc = WordCloud(
@@ -207,7 +199,7 @@ else:
 # --- Recommendations ---
 st.subheader("🧠 Recommendations")
 st.markdown("""
-- ✅ **Improve communication** around fare structure and calculations.git status
+- ✅ **Improve communication** around fare structure and calculations.
 
 - 📢 **Use SMS, community radio, and bus posters** to educate the public.
 - 💳 **Standardize smart card fare updates** to avoid confusion.
